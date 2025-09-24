@@ -15,17 +15,25 @@ spec:
     spec:
       containers:
         - name: cv-analyzer
-          image: cv-analyzer:local
-          # expose container port that FastAPI listens on
+          # ⚠️ Use a dynamic tag to force updates (replace :local at deploy time)
+          image: cv-analyzer:latest
+          imagePullPolicy: IfNotPresent   # prevents pulling from Docker Hub (important when using minikube image load)
           ports:
             - containerPort: 8000
           env:
-            # inject the OpenAI API key from the Kubernetes secret
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: openai-secret
                   key: OPENAI_API_KEY
+          # Optional but recommended for production stability:
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
 ---
 apiVersion: v1
 kind: Service
