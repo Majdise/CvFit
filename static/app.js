@@ -1,71 +1,192 @@
-const form = document.getElementById('analyzeForm');
-const spinner = document.getElementById('spinner');
-const results = document.getElementById('results');
-const suggestionsEl = document.getElementById('suggestions');
-const fitBar = document.getElementById('fitBar');
-const fitScoreLabel = document.getElementById('fitScoreLabel');
-const fitReason = document.getElementById('fitReason');
-const salaryNote = document.getElementById('salaryNote');
-const rawJson = document.getElementById('rawJson');
-const copyJsonBtn = document.getElementById('copyJsonBtn');
-const submitBtn = document.getElementById('submitBtn');
+/* Utilities */
+const $ = (sel) => document.querySelector(sel);
+const el = (tag, cls) => { const e = document.createElement(tag); if (cls) e.className = cls; return e; };
 
-form.addEventListener('submit', async (e) => {
+const state = {
+  lastJSON: null,
+  lastBullets: [],
+};
+
+/* Init */
+window.addEventListener('DOMContentLoaded', () => {
+  $("#year").textContent = new Date().getFullYear();
+
+  $("#btnUseSample").addEventListener('click', useSampleJD);
+  $("#btnClearJD").addEventListener('click', () => $("#job_description").value = "");
+  $("#btnClearAll").addEventListener('click', clearAll);
+
+  $("#analyzeForm").addEventListener('submit', onAnalyze);
+  $("#btnCopySuggestions").addEventListener('click', onCopySuggestions);
+  $("#btnDownloadJSON").addEventListener('click', onDownloadJSON);
+  $("#btnGenBullets").addEventListener('click', onGenerateBullets);
+  $("#btnCopyBullets").addEventListener('click', onCopyBullets);
+  $("#btnToggleDebug").addEventListener('click', toggleDebug);
+});
+
+/* Sample JD text */
+function useSampleJD() {
+  $("#job_description").value =
+`We’re hiring a Tier 2 Technical Support Engineer for our SaaS video platform.
+Must have: 2–4 years SaaS support, strong SQL, REST APIs & JSON, log analysis, AWS (CloudWatch, S3, Athena), Grafana/OpenSearch.
+Nice: Python/Bash scripting, Live events support, excellent English.`;
+}
+
+/* Clear */
+function clearAll() {
+  $("#cv_file").value = "";
+  $("#job_description").value = "";
+  $("#results").classList.add("hidden");
+  $("#errorBox").classList.add("hidden");
+  $("#rawJSON").textContent = "";
+  $("#debug").classList.add("hidden");
+  state.lastJSON = null;
+  state.lastBullets = [];
+}
+
+/* Analyze */
+async function onAnalyze(e) {
   e.preventDefault();
+  const fd = new FormData($("#analyzeForm"));
+  const cv = fd.get("cv_file");
+  const jd = (fd.get("job_description") || "").toString().trim();
 
-  // Basic client-side checks
-  const cvInput = document.getElementById('cv');
-  const jdInput = document.getElementById('jd');
-  if (!cvInput.files.length || !jdInput.value.trim()) return;
+  if (!cv || !cv.name) return showError("Please attach a CV file.");
+  if (!jd) return showError("Please paste the job description.");
 
-  // UI state
-  spinner.classList.remove('hidden');
-  submitBtn.disabled = true;
-  results.classList.add('hidden');
-
+  setLoading(true);
   try {
-    const data = new FormData();
-    data.append('cv_file', cvInput.files[0]);
-    data.append('job_description', jdInput.value);
-
-    const res = await fetch('/analyze', { method: 'POST', body: data });
-    const json = await res.json();
-
+    const res = await fetch("/analyze", { method: "POST", body: fd });
+    const text = await res.text();
     if (!res.ok) {
-      throw new Error(json?.detail || `HTTP ${res.status}`);
+      throw new Error(`API error (${res.status}): ${text}`);
     }
-
-    // Render
-    fitScoreLabel.textContent = `${json.fit_score}/100`;
-    fitBar.style.width = `${Math.max(0, Math.min(100, json.fit_score))}%`;
-    fitBar.className =
-      `h-3 rounded-full ${json.fit_score >= 70 ? 'bg-green-500'
-                         : json.fit_score >= 40 ? 'bg-yellow-500'
-                         : 'bg-red-500'}`;
-    fitReason.textContent = json.fit_reason || '';
-    salaryNote.textContent = json.expected_salary_note || '';
-
-    suggestionsEl.innerHTML = '';
-    (json.improvement_suggestions || []).forEach(s => {
-      const li = document.createElement('li');
-      li.textContent = s;
-      suggestionsEl.appendChild(li);
-    });
-
-    rawJson.textContent = JSON.stringify(json, null, 2);
-    results.classList.remove('hidden');
+    const data = JSON.parse(text);
+    state.lastJSON = data;
+    renderResults(data);
   } catch (err) {
-    alert(`Analyze failed: ${err.message}`);
+    showError(err.message || String(err));
   } finally {
-    spinner.classList.add('hidden');
-    submitBtn.disabled = false;
+    setLoading(false);
   }
-});
+}
 
-copyJsonBtn.addEventListener('click', async () => {
-  try {
-    await navigator.clipboard.writeText(rawJson.textContent || '');
-    copyJsonBtn.textContent = 'Copied!';
-    setTimeout(() => (copyJsonBtn.textContent = 'Copy raw JSON'), 1200);
-  } catch {}
-});
+/* Render */
+function renderResults(data) {
+  $("#results").classList.remove("hidden");
+  $("#errorBox").classList.add("hidden");
+
+  const score = Number(data.fit_score ?? 0);
+  $("#fitScore").textContent = `${score}/100`;
+  $("#fitScore").style.background = score >= 75 ? "#85f0c3" : score >= 55 ? "#ffd178" : "#ff9aa5";
+  $("#fitReason").textContent = data.fit_reason || "";
+
+  $("#salaryNote").textContent = data.expected_salary_note || "";
+
+  const ul = $("#suggestions");
+  ul.innerHTML = "";
+  (data.improvement_suggestions || []).forEach(s => {
+    const li = el("li"); li.textContent = s; ul.appendChild(li);
+  });
+
+  // raw debug
+  $("#rawJSON").textContent = JSON.stringify(data, null, 2);
+
+  // reset bullets area
+  $("#xpBullets").innerHTML = "";
+  $("#btnCopyBullets").disabled = true;
+  state.lastBullets = [];
+}
+
+/* Generate bullets (Experience Enhancer) */
+function onGenerateBullets() {
+  if (!state.lastJSON) return showError("Run Analyze first.");
+  const jd = $("#job_description").value.trim();
+  const suggestions = state.lastJSON.improvement_suggestions || [];
+
+  // naive keyword extraction from JD (top ~8 unique words by length)
+  const keyTerms = Array.from(new Set(
+    jd.toLowerCase()
+      .replace(/[^\w\s/+.()-]/g, " ")
+      .split(/\s+/)
+      .filter(w => w.length > 3)
+  ))
+  .sort((a,b)=> b.length - a.length)
+  .slice(0, 8);
+
+  // turn suggestions into punchy resume bullets with action + metric
+  const bullets = suggestions.map((sug, i) => {
+    // emphasize key terms if appear
+    let line = sug.replace(new RegExp(`\\b(${keyTerms.join("|")})\\b`, "gi"), '**$1**');
+    // basic action verb + impact if missing punctuation
+    if (!/[.?!)]$/.test(line)) {
+      line += " to improve reliability and customer outcomes.";
+    }
+    // Add a leading action if it looks like a fragment
+    if (!/^(Built|Led|Implemented|Automated|Optimized|Designed|Owned|Introduced|Developed|Resolved|Reduced|Improved|Created|Maintained|Collaborated)/i.test(line)) {
+      line = `Implemented ${line.charAt(0).toLowerCase() + line.slice(1)}`;
+    }
+    return `• ${line}`;
+  });
+
+  state.lastBullets = bullets;
+  const ul = $("#xpBullets");
+  ul.innerHTML = "";
+  bullets.forEach(b => {
+    const li = el("li"); li.innerHTML = b; ul.appendChild(li);
+  });
+  $("#btnCopyBullets").disabled = bullets.length === 0;
+}
+
+/* Copy helpers */
+function onCopySuggestions(){
+  if (!state.lastJSON) return showError("Run Analyze first.");
+  const text = (state.lastJSON.improvement_suggestions || []).map(s=>`• ${s}`).join("\n");
+  navigator.clipboard.writeText(text).then(()=> toast("Suggestions copied"));
+}
+function onCopyBullets(){
+  if (!state.lastBullets.length) return showError("Generate bullets first.");
+  navigator.clipboard.writeText(state.lastBullets.join("\n")).then(()=> toast("Experience bullets copied"));
+}
+function onDownloadJSON(){
+  if (!state.lastJSON) return showError("Nothing to download yet.");
+  const blob = new Blob([JSON.stringify(state.lastJSON, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "cv_analyzer_result.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* UI helpers */
+function showError(msg){
+  const box = $("#errorBox");
+  box.textContent = msg;
+  box.classList.remove("hidden");
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+function setLoading(is){
+  $("#spinner").classList.toggle("hidden", !is);
+  $("#btnAnalyze").disabled = is;
+}
+function toggleDebug(){
+  $("#debug").classList.toggle("hidden");
+}
+function toast(msg){
+  // quick non-blocking toast
+  const t = el("div","toast"); t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(()=> t.classList.add("show"), 10);
+  setTimeout(()=> { t.classList.remove("show"); setTimeout(()=>t.remove(), 250) }, 1600);
+}
+
+/* Tiny toast style */
+const style = document.createElement("style");
+style.textContent = `
+.toast{
+  position: fixed; left:50%; bottom:24px; transform: translateX(-50%) translateY(20px);
+  background:#0d1329; color:#dfe7ff; border:1px solid #263255; padding:.45rem .7rem; border-radius:8px;
+  opacity:0; transition: all .25s ease; z-index:9999;
+}
+.toast.show{ opacity:1; transform: translateX(-50%) translateY(0) }
+`;
+document.head.appendChild(style);

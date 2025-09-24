@@ -1,82 +1,109 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>CV Analyzer</title>
+  <meta charset="UTF-8" />
+  <title>CV Analyzer • Role Fit & Experience Enhancer</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Tailwind CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Basic styles -->
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link href="/static/styles.css" rel="stylesheet" />
 </head>
-<body class="bg-gray-50 text-gray-900">
-  <div class="max-w-5xl mx-auto p-6">
-    <header class="mb-8">
-      <h1 class="text-3xl font-bold">CV ↔ JD Analyzer</h1>
-      <p class="text-gray-600">Upload your CV and paste a job description. Get fit score, salary note & improvements.</p>
-    </header>
+<body>
+  <header class="site-header">
+    <h1>CV Analyzer</h1>
+    <p class="subtitle">Analyze fit, get improvements, and auto-craft experience bullets for a role.</p>
+  </header>
 
-    <!-- Form card -->
-    <section class="bg-white rounded-2xl shadow p-6 mb-8">
-      <form id="analyzeForm" class="space-y-4">
-        <div>
-          <label class="block font-medium mb-1">Your CV file (.pdf / .docx / .txt) *</label>
-          <input id="cv" name="cv_file" type="file" accept=".pdf,.docx,.txt"
-                 class="w-full border rounded p-2" required />
+  <main class="container">
+    <section class="card">
+      <h2>1) Upload CV & Paste Role</h2>
+      <form id="analyzeForm">
+        <div class="grid-2">
+          <div>
+            <label class="label">Your CV (PDF/DOCX/TXT)</label>
+            <input type="file" name="cv_file" id="cv_file" accept=".pdf,.docx,.txt" required />
+            <p class="hint">Max ~5–10MB. We extract text locally and send to the API.</p>
+          </div>
+
+          <div>
+            <label class="label">Role / Job Description</label>
+            <textarea id="job_description" name="job_description" rows="10" placeholder="Paste the role description…"></textarea>
+            <div class="row space-between">
+              <button class="btn btn-secondary" type="button" id="btnUseSample">Use Sample JD</button>
+              <button class="btn btn-ghost" type="button" id="btnClearJD">Clear</button>
+            </div>
+          </div>
         </div>
 
-        <div>
-          <label class="block font-medium mb-1">Job description *</label>
-          <textarea id="jd" name="job_description" rows="7"
-                    class="w-full border rounded p-3"
-                    placeholder="Paste the role description..." required></textarea>
-        </div>
-
-        <div class="flex items-center gap-3">
-          <button id="submitBtn" type="submit"
-                  class="px-5 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">
-            Analyze
-          </button>
-          <span id="spinner" class="hidden text-sm text-gray-600">Analyzing…</span>
+        <div class="row gap">
+          <button class="btn" type="submit" id="btnAnalyze">Analyze Fit</button>
+          <button class="btn btn-ghost" type="button" id="btnClearAll">Reset</button>
         </div>
       </form>
+
+      <div id="spinner" class="spinner hidden">
+        <div class="loader"></div>
+        <span>Analyzing with AI…</span>
+      </div>
+
+      <div id="errorBox" class="alert hidden"></div>
     </section>
 
-    <!-- Results -->
-    <section id="results" class="hidden bg-white rounded-2xl shadow p-6">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-xl font-semibold">Results</h2>
-        <button id="copyJsonBtn" class="text-sm text-indigo-600 hover:underline">Copy raw JSON</button>
-      </div>
+    <section id="results" class="card hidden">
+      <h2>2) Results</h2>
 
-      <div class="mb-6">
-        <div class="flex justify-between mb-1">
-          <span class="font-medium">Fit score</span>
-          <span id="fitScoreLabel">—</span>
+      <div class="result-grid">
+        <div class="result-box">
+          <h3>Fit Score</h3>
+          <div id="fitScore" class="fit-badge">–</div>
+          <p id="fitReason" class="muted"></p>
         </div>
-        <div class="w-full bg-gray-200 rounded-full h-3">
-          <div id="fitBar" class="bg-green-500 h-3 rounded-full" style="width: 0%"></div>
+
+        <div class="result-box">
+          <h3>Salary Note</h3>
+          <p id="salaryNote" class="mono"></p>
+          <button class="btn btn-small" type="button" data-copy="#salaryNote">Copy</button>
         </div>
-        <p id="fitReason" class="text-gray-700 mt-2"></p>
       </div>
 
-      <div class="mb-6">
-        <h3 class="font-medium mb-2">Expected salary</h3>
-        <p id="salaryNote" class="text-gray-700"></p>
-      </div>
+      <div class="stack">
+        <div class="result-box">
+          <h3>Improvement Suggestions</h3>
+          <ul id="suggestions"></ul>
+          <div class="row gap">
+            <button class="btn btn-small" type="button" id="btnCopySuggestions">Copy All</button>
+            <button class="btn btn-small btn-secondary" type="button" id="btnDownloadJSON">Download JSON</button>
+          </div>
+        </div>
 
-      <div>
-        <h3 class="font-medium mb-2">Improvement suggestions</h3>
-        <ul id="suggestions" class="list-disc ml-5 space-y-1"></ul>
+        <div class="result-box">
+          <div class="row space-between">
+            <h3>Experience Enhancer</h3>
+            <div class="row gap">
+              <button class="btn btn-small" type="button" id="btnGenBullets">Generate Bullets</button>
+              <button class="btn btn-small" type="button" id="btnCopyBullets" disabled>Copy Bullets</button>
+            </div>
+          </div>
+          <p class="hint">
+            We’ll craft resume bullets aligned to the JD, using the suggestions and key terms. Use these to refine your “Experience” section.
+          </p>
+          <ul id="xpBullets" class="bullets"></ul>
+        </div>
       </div>
-
-      <details class="mt-6">
-        <summary class="cursor-pointer text-sm text-gray-500">Show raw JSON</summary>
-        <pre id="rawJson"
-             class="mt-2 bg-gray-50 border rounded p-3 overflow-auto text-xs"></pre>
-      </details>
     </section>
-  </div>
+
+    <section id="debug" class="card hidden">
+      <h3>Debug / Raw JSON</h3>
+      <pre id="rawJSON" class="code"></pre>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <span>© <span id="year"></span> CV Analyzer</span>
+    <div class="row gap">
+      <button class="btn btn-ghost btn-small" id="btnToggleDebug" type="button">Toggle Debug</button>
+      <a class="btn btn-ghost btn-small" href="/docs" target="_blank" rel="noreferrer">API Docs</a>
+    </div>
+  </footer>
 
   <script src="/static/app.js"></script>
 </body>
