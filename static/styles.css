@@ -1,0 +1,2 @@
+/* Make focus visible */
+:focus-visible { outline: 3px solid #6366f1; outline-offset: 2px; }

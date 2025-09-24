@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>CV Analyzer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Basic styles -->
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body class="bg-gray-50 text-gray-900">
+  <div class="max-w-5xl mx-auto p-6">
+    <header class="mb-8">
+      <h1 class="text-3xl font-bold">CV ↔ JD Analyzer</h1>
+      <p class="text-gray-600">Upload your CV and paste a job description. Get fit score, salary note & improvements.</p>
+    </header>
+
+    <!-- Form card -->
+    <section class="bg-white rounded-2xl shadow p-6 mb-8">
+      <form id="analyzeForm" class="space-y-4">
+        <div>
+          <label class="block font-medium mb-1">Your CV file (.pdf / .docx / .txt) *</label>
+          <input id="cv" name="cv_file" type="file" accept=".pdf,.docx,.txt"
+                 class="w-full border rounded p-2" required />
+        </div>
+
+        <div>
+          <label class="block font-medium mb-1">Job description *</label>
+          <textarea id="jd" name="job_description" rows="7"
+                    class="w-full border rounded p-3"
+                    placeholder="Paste the role description..." required></textarea>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button id="submitBtn" type="submit"
+                  class="px-5 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">
+            Analyze
+          </button>
+          <span id="spinner" class="hidden text-sm text-gray-600">Analyzing…</span>
+        </div>
+      </form>
+    </section>
+
+    <!-- Results -->
+    <section id="results" class="hidden bg-white rounded-2xl shadow p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-semibold">Results</h2>
+        <button id="copyJsonBtn" class="text-sm text-indigo-600 hover:underline">Copy raw JSON</button>
+      </div>
+
+      <div class="mb-6">
+        <div class="flex justify-between mb-1">
+          <span class="font-medium">Fit score</span>
+          <span id="fitScoreLabel">—</span>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-3">
+          <div id="fitBar" class="bg-green-500 h-3 rounded-full" style="width: 0%"></div>
+        </div>
+        <p id="fitReason" class="text-gray-700 mt-2"></p>
+      </div>
+
+      <div class="mb-6">
+        <h3 class="font-medium mb-2">Expected salary</h3>
+        <p id="salaryNote" class="text-gray-700"></p>
+      </div>
+
+      <div>
+        <h3 class="font-medium mb-2">Improvement suggestions</h3>
+        <ul id="suggestions" class="list-disc ml-5 space-y-1"></ul>
+      </div>
+
+      <details class="mt-6">
+        <summary class="cursor-pointer text-sm text-gray-500">Show raw JSON</summary>
+        <pre id="rawJson"
+             class="mt-2 bg-gray-50 border rounded p-3 overflow-auto text-xs"></pre>
+      </details>
+    </section>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
