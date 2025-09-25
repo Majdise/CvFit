@@ -4,7 +4,8 @@ const el = (tag, cls) => { const e = document.createElement(tag); if (cls) e.cla
 
 const state = {
   lastJSON: null,
-  lastBullets: [],
+  lastBullets: [],              // rendered bullets (from API or fallback)
+  apiBullets: [],               // experience_enhancement from API
 };
 
 /* Init */
@@ -39,8 +40,12 @@ function clearAll() {
   $("#errorBox").classList.add("hidden");
   $("#rawJSON").textContent = "";
   $("#debug").classList.add("hidden");
+  $("#xpBullets").innerHTML = "";
+  $("#btnCopyBullets").disabled = true;
+
   state.lastJSON = null;
   state.lastBullets = [];
+  state.apiBullets = [];
 }
 
 /* Analyze */
@@ -79,9 +84,9 @@ function renderResults(data) {
   $("#fitScore").textContent = `${score}/100`;
   $("#fitScore").style.background = score >= 75 ? "#85f0c3" : score >= 55 ? "#ffd178" : "#ff9aa5";
   $("#fitReason").textContent = data.fit_reason || "";
-
   $("#salaryNote").textContent = data.expected_salary_note || "";
 
+  // suggestions
   const ul = $("#suggestions");
   ul.innerHTML = "";
   (data.improvement_suggestions || []).forEach(s => {
@@ -91,19 +96,41 @@ function renderResults(data) {
   // raw debug
   $("#rawJSON").textContent = JSON.stringify(data, null, 2);
 
-  // reset bullets area
-  $("#xpBullets").innerHTML = "";
-  $("#btnCopyBullets").disabled = true;
-  state.lastBullets = [];
+  // EXPERIENCE ENHANCEMENT (from API if present)
+  const apiEnh = Array.isArray(data.experience_enhancement) ? data.experience_enhancement : [];
+  state.apiBullets = apiEnh.slice();
+  renderXpBullets(apiEnh);
+
+  // If API gave bullets, enable copy right away
+  $("#btnCopyBullets").disabled = apiEnh.length === 0;
 }
 
-/* Generate bullets (Experience Enhancer) */
+/* Render XP bullets helper */
+function renderXpBullets(bullets) {
+  const ul = $("#xpBullets");
+  ul.innerHTML = "";
+  state.lastBullets = bullets.slice();
+  bullets.forEach(b => {
+    const li = el("li"); li.innerHTML = sanitize(b); ul.appendChild(li);
+  });
+}
+
+/* Generate bullets (fallback if API didn't return any) */
 function onGenerateBullets() {
   if (!state.lastJSON) return showError("Run Analyze first.");
+
+  // If API already gave experience_enhancement, just re-render it (or tweak if desired).
+  if (state.apiBullets.length > 0) {
+    renderXpBullets(state.apiBullets);
+    $("#btnCopyBullets").disabled = state.apiBullets.length === 0;
+    toast("Using AI-generated experience bullets from the API");
+    return;
+  }
+
+  // Otherwise fallback: synthesize from suggestions + JD keywords (your previous logic)
   const jd = $("#job_description").value.trim();
   const suggestions = state.lastJSON.improvement_suggestions || [];
 
-  // naive keyword extraction from JD (top ~8 unique words by length)
   const keyTerms = Array.from(new Set(
     jd.toLowerCase()
       .replace(/[^\w\s/+.()-]/g, " ")
@@ -113,28 +140,20 @@ function onGenerateBullets() {
   .sort((a,b)=> b.length - a.length)
   .slice(0, 8);
 
-  // turn suggestions into punchy resume bullets with action + metric
-  const bullets = suggestions.map((sug, i) => {
-    // emphasize key terms if appear
-    let line = sug.replace(new RegExp(`\\b(${keyTerms.join("|")})\\b`, "gi"), '**$1**');
-    // basic action verb + impact if missing punctuation
+  const bullets = suggestions.map((sug) => {
+    let line = sug.replace(new RegExp(`\\b(${keyTerms.join("|")})\\b`, "gi"), '<strong>$1</strong>');
     if (!/[.?!)]$/.test(line)) {
       line += " to improve reliability and customer outcomes.";
     }
-    // Add a leading action if it looks like a fragment
     if (!/^(Built|Led|Implemented|Automated|Optimized|Designed|Owned|Introduced|Developed|Resolved|Reduced|Improved|Created|Maintained|Collaborated)/i.test(line)) {
       line = `Implemented ${line.charAt(0).toLowerCase() + line.slice(1)}`;
     }
     return `• ${line}`;
   });
 
-  state.lastBullets = bullets;
-  const ul = $("#xpBullets");
-  ul.innerHTML = "";
-  bullets.forEach(b => {
-    const li = el("li"); li.innerHTML = b; ul.appendChild(li);
-  });
+  renderXpBullets(bullets);
   $("#btnCopyBullets").disabled = bullets.length === 0;
+  toast("Generated experience bullets (fallback)");
 }
 
 /* Copy helpers */
@@ -144,8 +163,12 @@ function onCopySuggestions(){
   navigator.clipboard.writeText(text).then(()=> toast("Suggestions copied"));
 }
 function onCopyBullets(){
-  if (!state.lastBullets.length) return showError("Generate bullets first.");
-  navigator.clipboard.writeText(state.lastBullets.join("\n")).then(()=> toast("Experience bullets copied"));
+  if (!state.lastBullets.length) return showError("No bullets to copy.");
+  // Strip any markup when copying
+  const plain = state.lastBullets
+    .map(b => b.replace(/<[^>]+>/g, "")) // remove tags like <strong>
+    .join("\n");
+  navigator.clipboard.writeText(plain).then(()=> toast("Experience bullets copied"));
 }
 function onDownloadJSON(){
   if (!state.lastJSON) return showError("Nothing to download yet.");
@@ -172,11 +195,17 @@ function toggleDebug(){
   $("#debug").classList.toggle("hidden");
 }
 function toast(msg){
-  // quick non-blocking toast
   const t = el("div","toast"); t.textContent = msg;
   document.body.appendChild(t);
   setTimeout(()=> t.classList.add("show"), 10);
   setTimeout(()=> { t.classList.remove("show"); setTimeout(()=>t.remove(), 250) }, 1600);
+}
+
+/* Basic sanitizer for innerHTML usage */
+function sanitize(s){
+  // very light safe transform: convert **bold** to <strong>, escape other tags
+  const esc = s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  return esc.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
 }
 
 /* Tiny toast style */

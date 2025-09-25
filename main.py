@@ -43,7 +43,7 @@ client = OpenAI(api_key=settings.OPENAI_API_KEY)
 # App & Middleware
 # ------------------------------------------------------------------------------
 
-app = FastAPI(title="CV Analyzer API", version="0.2.0")
+app = FastAPI(title="CV Analyzer API", version="0.3.0")
 origins = (
     ["*"] if settings.CORS_ALLOW_ORIGINS.strip() == "*"
     else [o.strip() for o in settings.CORS_ALLOW_ORIGINS.split(",")]
@@ -88,6 +88,8 @@ class AnalyzeResponse(BaseModel):
     fit_score: int = Field(ge=0, le=100)
     fit_reason: str
     expected_salary_note: str
+    # NEW: truth-preserving reframed bullets for the CV experience section
+    experience_enhancement: List[str] = []
 
 class ExtractResponse(BaseModel):
     name: Optional[str] = None
@@ -159,22 +161,30 @@ def _read_file_content(upload: UploadFile) -> str:
         )
 
 def _build_analysis_prompt(cv_text: str, jd_text: str) -> str:
+    # tightened, truth-preserving “reframe” instructions
     return f"""
-You are an expert technical recruiter and hiring manager. Analyze the candidate CV against the job description.
+You are an expert technical recruiter and hiring manager. Analyze the candidate's CV against the job description.
 
-Return ONLY a JSON object with these keys and types:
-- improvement_suggestions: string[] (3-8 bullets, concise)
-- fit_score: number (0-100)
-- fit_reason: string
-- expected_salary_note: string
+Return ONLY a JSON object with keys and types EXACTLY as follows:
+- improvement_suggestions: string[]  (3–8 short, actionable bullets)
+- fit_score: number                   (0–100)
+- fit_reason: string                  (<= 250 chars)
+- expected_salary_note: string        (Israel market, gross/month range; state assumptions if uncertain)
+- experience_enhancement: string[]    (3–8 bullets that REWRITE ONLY WHAT THE CANDIDATE ALREADY DID,
+                                       using the JD's vocabulary when it truthfully applies.
+                                       Each bullet: past-tense verb + action + tech + realistic outcome/metric.)
 
-CV:
+Hard rules:
+- Do NOT invent projects, roles, or tools the candidate never mentioned.
+- If a JD tool is missing from the CV, suggest it only as a learning plan — do not add it to experience_enhancement.
+- Be specific and honest; avoid vague clichés.
+- Keep JSON valid; no code fences; no extra keys.
+
+CANDIDATE_CV:
 \"\"\"{cv_text}\"\"\"
 
-JOB DESCRIPTION:
+JOB_DESCRIPTION:
 \"\"\"{jd_text}\"\"\"
-
-Be factual and specific; avoid hallucinations. Keep salary note for Israel (gross/month) as a broad range when uncertain.
 """
 
 def _build_extract_prompt(cv_text: str) -> str:
@@ -286,6 +296,7 @@ async def analyze_batch(
                 fit_score=0,
                 fit_reason=f"Error: {e}",
                 expected_salary_note="N/A",
+                experience_enhancement=[],
             )
             results.append(BatchAnalyzeItem(filename=f.filename or "cv", result=failed))
 

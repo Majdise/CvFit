@@ -62,6 +62,12 @@
           <p id="salaryNote" class="mono"></p>
           <button class="btn btn-small" type="button" data-copy="#salaryNote">Copy</button>
         </div>
+
+        <!-- Optional model display -->
+        <div class="result-box">
+          <h3>Model</h3>
+          <p id="modelName" class="mono">—</p>
+        </div>
       </div>
 
       <div class="stack">
@@ -76,7 +82,7 @@
 
         <div class="result-box">
           <div class="row space-between">
-            <h3>Experience Enhancer</h3>
+            <h3>Experience Enhancer <span id="xpSource" class="badge muted"></span></h3>
             <div class="row gap">
               <button class="btn btn-small" type="button" id="btnGenBullets">Generate Bullets</button>
               <button class="btn btn-small" type="button" id="btnCopyBullets" disabled>Copy Bullets</button>
